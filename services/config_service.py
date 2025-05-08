@@ -26,9 +26,7 @@ class ConfigService:
     
     @handle_exceptions
     def _load_configs(self) -> None:
-        """
-        Load all configuration files from the config directory
-        """
+        """Load all configuration files from the config directory"""
         with self.config_lock:
             count = 0
             for filename in os.listdir(self.config_dir):
@@ -57,16 +55,7 @@ class ConfigService:
 
     @handle_exceptions
     def get_pending_configs(self, code: str, last_timestamp: float) -> Optional[Dict]:
-        """
-        Get pending configuration updates for a data app
-        
-        Args:
-            code: The unique code of the data app
-            last_timestamp: The timestamp of the last configuration update received by the data app
-            
-        Returns:
-            The configuration if there's a newer version, None otherwise
-        """
+        """Get pending configuration updates for a data app"""
         with self.config_lock:
             if code not in self.config_cache:
                 return None
@@ -76,42 +65,19 @@ class ConfigService:
 
     @handle_exceptions
     def get_config(self, code: str) -> Optional[Dict]:
-        """
-        Get the current configuration for a data app
-        
-        Args:
-            code: The unique code of the data app
-            
-        Returns:
-            The configuration if it exists, None otherwise
-        """
+        """Get the current configuration for a data app"""
         with self.config_lock:
             if code not in self.config_cache:
                 return None
                 
             config = self.config_cache[code]
             
-            # Normalize naming conventions if needed
-            result = config.config.copy()
-            if 'orgId' not in result and 'org_id' in result:
-                result['orgId'] = result['org_id']
-            if 'berthId' not in result and 'berth_id' in result:
-                result['berthId'] = result['berth_id']
-                
-            return result
+            # Return a copy of the config
+            return config.config.copy()
 
     @handle_exceptions
     def add_config(self, code: str, config: Dict) -> ConfigUpdate:
-        """
-        Add or update a configuration for a data app
-        
-        Args:
-            code: The unique code of the data app
-            config: The configuration to add or update
-            
-        Returns:
-            The updated configuration
-        """
+        """Add or update a configuration for a data app"""
         with self.config_lock:
             # Generate version and timestamp
             version = 1
@@ -131,7 +97,7 @@ class ConfigService:
             # Save to disk
             self._save_config(code)
             
-            logger.info(f"Added/updated config for {code} (version {version})")
+            logger.info(f"Updated config for {code} (version {version})")
             
             # Propagate to other data apps at the same berth if applicable
             self._propagate_config(code, config)
@@ -140,13 +106,7 @@ class ConfigService:
 
     @handle_exceptions
     def _propagate_config(self, source_code: str, config: Dict) -> None:
-        """
-        Propagate a configuration to other data apps at the same berth
-        
-        Args:
-            source_code: The code of the data app that received the update
-            config: The configuration to propagate
-        """
+        """Propagate a configuration to other data apps at the same berth"""
         # Extract berth information
         org_id = config.get('orgId') or config.get('org_id')
         berth_id = config.get('berthId') or config.get('berth_id')
@@ -176,49 +136,28 @@ class ConfigService:
 
     @handle_exceptions
     def update_berth_mappings(self, mappings: Dict[str, List[str]]) -> None:
-        """
-        Update the berth-to-data-app mappings and synchronize configurations
-        
-        Args:
-            mappings: Dictionary mapping "orgId_berthId" to list of data app codes
-        """
+        """Update the berth-to-data-app mappings and synchronize configurations"""
         with self.config_lock:
-            # Get current codes with configurations
-            all_codes = set(self.config_cache.keys())
-            
-            # Get all codes that now belong to berths
-            codes_with_berths = set()
-            for codes in mappings.values():
-                codes_with_berths.update(codes)
-                
-            # Identify codes to remove (no longer associated with any berth)
-            codes_to_remove = all_codes - codes_with_berths
-            if codes_to_remove:
-                logger.info(f"Removing configurations for {len(codes_to_remove)} data apps no longer at any berth")
-            
             # Update berth mappings
             self.berth_mappings = mappings
             
             # For each berth, find the latest config and propagate it
             for berth_key, codes in mappings.items():
+                if not codes:
+                    continue
+                    
                 latest_config = None
                 latest_timestamp = 0
                 latest_code = None
                 
                 # Find the most recent config for this berth
-                for code in all_codes:
+                for code in codes:
                     if code in self.config_cache:
                         config = self.config_cache[code]
-                        config_org_id = config.config.get('orgId') or config.config.get('org_id')
-                        config_berth_id = config.config.get('berthId') or config.config.get('berth_id')
-                        
-                        if config_org_id is not None and config_berth_id is not None:
-                            key_from_config = f"{config_org_id}_{config_berth_id}"
-                            
-                            if berth_key == key_from_config and config.timestamp > latest_timestamp:
-                                latest_config = config.config
-                                latest_timestamp = config.timestamp
-                                latest_code = code
+                        if config.timestamp > latest_timestamp:
+                            latest_config = config.config
+                            latest_timestamp = config.timestamp
+                            latest_code = code
                 
                 # If we found a config, ensure all codes at this berth have it
                 if latest_config and latest_code:
@@ -226,32 +165,20 @@ class ConfigService:
                     
                     for code in codes:
                         if code == latest_code:
-                            # Skip the source code
                             continue
                             
                         if code not in self.config_cache:
                             # Code doesn't have a config yet, add it
                             self.add_config(code, latest_config)
-                            logger.info(f"Added config for new code {code} at berth {berth_key}")
                         else:
                             current_config = self.config_cache[code]
                             if current_config.timestamp < latest_timestamp:
                                 # Code has older config, update it
                                 self.add_config(code, latest_config)
-                                logger.info(f"Updated config for {code} with latest berth config")
-            
-            # Remove configurations for codes no longer at any berth
-            for code in codes_to_remove:
-                self._remove_config(code)
 
     @handle_exceptions
     def _save_config(self, code: str) -> None:
-        """
-        Save a configuration to disk
-        
-        Args:
-            code: The unique code of the data app
-        """
+        """Save a configuration to disk"""
         try:
             filepath = os.path.join(self.config_dir, f'{code}.json')
             with open(filepath, 'w') as f:
@@ -266,63 +193,9 @@ class ConfigService:
             raise ConfigurationError(f"Failed to save configuration for {code}: {str(e)}")
 
     @handle_exceptions
-    def _remove_config(self, code: str) -> None:
-        """
-        Remove a configuration from cache and disk
-        
-        Args:
-            code: The unique code of the data app
-        """
-        try:
-            # Remove from cache
-            if code in self.config_cache:
-                del self.config_cache[code]
-            
-            # Remove from disk
-            filepath = os.path.join(self.config_dir, f'{code}.json')
-            if os.path.exists(filepath):
-                os.remove(filepath)
-                
-            logger.info(f"Removed config for code {code}")
-        except Exception as e:
-            logger.error(f"Failed to remove config for {code}: {str(e)}", exc_info=True)
-
-    @handle_exceptions
     def get_config_version(self, code: str) -> Optional[int]:
-        """
-        Get the current version of a configuration
-        
-        Args:
-            code: The unique code of the data app
-            
-        Returns:
-            The version number if the configuration exists, None otherwise
-        """
+        """Get the current version of a configuration"""
         with self.config_lock:
             if code not in self.config_cache:
                 return None
             return self.config_cache[code].version
-
-    @handle_exceptions
-    def get_config_history(self, code: str) -> List[Dict[str, Any]]:
-        """
-        This is a placeholder for future implementation of config history
-        
-        Args:
-            code: The unique code of the data app
-            
-        Returns:
-            List of historical configurations (currently just returns the current one)
-        """
-        with self.config_lock:
-            if code not in self.config_cache:
-                return []
-                
-            # In a real implementation, this would retrieve historical versions
-            # For now, just return the current version
-            config = self.config_cache[code]
-            return [{
-                "version": config.version,
-                "timestamp": config.timestamp,
-                "config": config.config
-            }]

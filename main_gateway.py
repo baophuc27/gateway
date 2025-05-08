@@ -9,36 +9,16 @@ from services.kafka_service import KafkaService, KafkaConfigConsumer
 from services.db_service import DatabaseService
 from services.health_service import HealthService
 from services.monitoring_service import MonitoringService
-from utils.error_handler import (
-    register_exception_handlers, 
-    request_middleware, 
-    handle_exceptions,
-    NotFoundError, 
-    KafkaError,
-    ValidationError
-)
+from utils.error_handler import register_exception_handlers, request_middleware, handle_exceptions, NotFoundError, KafkaError, ValidationError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import time
 import os
-from typing import Optional
-from datetime import datetime
 import logging
+from datetime import datetime
 
 # Configure logging
 logger = logging.getLogger("bas_gateway")
-
-def convert_iso_to_unix_ms(iso_timestamp):
-    """
-    Convert ISO format timestamp to Unix timestamp in milliseconds
-    Example: "2025-04-29T04:51:08.699915+00:00" -> 1745909065078
-    """
-    # Parse the ISO timestamp
-    dt = datetime.fromisoformat(iso_timestamp)
-    
-    # Convert to Unix timestamp (seconds since epoch) and multiply by 1000 for milliseconds
-    unix_ms = int(dt.timestamp() * 1000)
-    
-    return unix_ms
+logger.setLevel(logging.INFO)
 
 # Get configuration from environment variables with defaults
 DB_CONNECTION = os.getenv("DATABASE_URL", "postgresql://root:rootReccotech@localhost:56432/bas_db")
@@ -48,8 +28,8 @@ HEARTBEAT_CHECK_INTERVAL = int(os.getenv("HEARTBEAT_CHECK_INTERVAL", "10"))
 CONFIG_SYNC_INTERVAL = int(os.getenv("CONFIG_SYNC_INTERVAL", "5"))
 
 # Initialize services
-config_service = ConfigService(CONFIG_DIR)
 db_service = DatabaseService(DB_CONNECTION)
+config_service = ConfigService(CONFIG_DIR)
 health_service = HealthService(db_service)
 kafka_service = KafkaService(KAFKA_BROKERS, db_service)
 monitoring_service = MonitoringService(db_service, config_service)
@@ -59,7 +39,8 @@ scheduler = AsyncIOScheduler()
 consumer = KafkaConfigConsumer(
     KAFKA_BROKERS, 
     db_service,
-    config_service
+    config_service,
+    topic="bas_config_event"
 )
 
 @asynccontextmanager
@@ -68,10 +49,11 @@ async def lifespan(app: FastAPI):
     logger.info("Starting BAS Gateway Service")
     
     try:
+        # Add scheduled tasks
         scheduler.add_job(
             monitoring_service.check_inactive_data_apps,
             'interval',
-            seconds=HEARTBEAT_CHECK_INTERVAL,  
+            seconds=HEARTBEAT_CHECK_INTERVAL,
             id='monitor_data_apps'
         )
         scheduler.add_job(
@@ -81,15 +63,12 @@ async def lifespan(app: FastAPI):
             id='sync_berth_configs'
         )
         
-        logger.info("Starting scheduler")
+        # Start services
         scheduler.start()
-        
-        logger.info("Starting Kafka consumer")
         consumer.start()
         
         logger.info("BAS Gateway Service started successfully")
         yield
-    
     except Exception as e:
         logger.error(f"Error during startup: {str(e)}", exc_info=True)
         raise
@@ -97,7 +76,7 @@ async def lifespan(app: FastAPI):
         # Shutdown: clean up resources
         logger.info("Shutting down BAS Gateway Service")
         scheduler.shutdown()
-        consumer.running = False  # Stop the Kafka consumer
+        consumer.stop()
         logger.info("BAS Gateway Service shutdown complete")
 
 app = FastAPI(
@@ -111,7 +90,7 @@ app = FastAPI(
 app.middleware("http")(request_middleware)
 register_exception_handlers(app)
 
-# Add health check endpoint
+# Health check endpoint
 @app.get("/health")
 async def health_check():
     return {
@@ -120,26 +99,20 @@ async def health_check():
         "version": "1.0.0"
     }
 
+# Data app heartbeat endpoint
 @app.get("/data-app/heartbeat")
 @handle_exceptions
-async def data_app_heartbeat(
-    code: str,
-    last_timestamp: Optional[float] = 0
-):
-    try:
-        status = await health_service.update_heartbeat(code)
-        pending_configs = config_service.get_pending_configs(code, last_timestamp)
-        
-        return {
-            "status": status, 
-            "config_updates": pending_configs,
-            "timestamp": time.time()
-        }
-    except HTTPException as e:
-        if e.status_code == 404:
-            raise NotFoundError(f"Data app with code {code} not found")
-        raise
+async def data_app_heartbeat(code: str, last_timestamp: float = 0):
+    status = await health_service.update_heartbeat(code)
+    pending_configs = config_service.get_pending_configs(code, last_timestamp)
+    
+    return {
+        "status": status, 
+        "config_updates": pending_configs,
+        "timestamp": time.time()
+    }
 
+# Receive sensor data endpoint
 @app.post("/data-app/sensor-data")
 @handle_exceptions
 async def receive_sensor_data(data: MessageRequest):
@@ -149,41 +122,32 @@ async def receive_sensor_data(data: MessageRequest):
         raise ValidationError(f"Data app with code {code} not configured")
     
     await health_service.update_active(code)
-    
-    try:
-        result = await kafka_service.send_sensor_data(topic, message)
-        return result
-    except Exception as e:
-        raise KafkaError(f"Failed to send sensor data: {str(e)}")
+    return await kafka_service.send_sensor_data(topic, message)
 
+# Vessel transition endpoint
 @app.post("/data-app/transition/{code}")
 @handle_exceptions
 async def receive_vessel_transition(code: str, transition: TransitionRequest):
     logger.info(f"Received transition request for {code}: {transition.fromState} -> {transition.toState}")
     
-    # Validate the data app code
     if code != transition.dataAppCode:
         raise ValidationError(
             f"Code mismatch: URL code '{code}' doesn't match payload code '{transition.dataAppCode}'",
             details={"url_code": code, "payload_code": transition.dataAppCode}
         )
     
-    # Process and store the transition
-    try:
-        result = await kafka_service.process_transition(transition)
-        
-        return {
-            "status": "success",
-            "message": f"Transition from {transition.fromState} to {transition.toState} recorded",
-            "details": result
-        }
-    except Exception as e:
-        raise KafkaError(f"Failed to process transition: {str(e)}")
+    result = await kafka_service.process_transition(transition)
+    
+    return {
+        "status": "success",
+        "message": f"Transition from {transition.fromState} to {transition.toState} recorded",
+        "details": result
+    }
 
+# Update data app config endpoint
 @app.post("/data-app/config/{code}")
 @handle_exceptions
 async def update_data_app_config(code: str, config: dict):
-    # Validate data app
     data_app = await db_service.get_data_app(code)
     if not data_app:
         raise NotFoundError(f"Data app with code {code} not found")
@@ -196,6 +160,7 @@ async def update_data_app_config(code: str, config: dict):
         "timestamp": time.time()
     }
 
+# Get data app config endpoint
 @app.get("/data-app/config/{code}")
 @handle_exceptions
 async def get_data_app_config(code: str):

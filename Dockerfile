@@ -14,6 +14,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
+    curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -24,8 +25,10 @@ RUN addgroup --system app && adduser --system --group app
 RUN mkdir -p /app/data_app_config /app/logs \
     && chown -R app:app /app
 
-# Install Python dependencies
+# Copy requirements file
 COPY requirements.txt .
+
+# Install Python dependencies
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
 

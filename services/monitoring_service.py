@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from services.db_service import DatabaseService
 from services.config_service import ConfigService
 import logging
+import asyncio
 
 logger = logging.getLogger("bas_gateway.monitoring")
 
@@ -34,12 +35,16 @@ class MonitoringService:
         Query all data apps and their berth assignments, updating config cache mappings
         """
         try:
-            # Get mapping of berth keys to data app codes
-            berth_mappings = self.db_service.get_data_apps_by_berth_mapping()
+            # Get mapping of berth keys to data app codes - must run in event loop
+            berth_mappings_future = asyncio.run_coroutine_threadsafe(
+                self.db_service.get_data_apps_by_berth_mapping(),
+                asyncio.get_event_loop()
+            )
+            berth_mappings = berth_mappings_future.result()
             
             # Update config cache with new mappings
             self.config_service.update_berth_mappings(berth_mappings)
             
-            logger.debug(f"Updated berth-to-code mappings: {berth_mappings}")
+            logger.debug(f"Updated berth-to-code mappings with {len(berth_mappings)} berths")
         except Exception as e:
             logger.error(f"Error syncing berth configs: {str(e)}", exc_info=True)

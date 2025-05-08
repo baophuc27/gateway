@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException
+# services/health_service.py
+from fastapi import HTTPException
 from services.db_service import DatabaseService
 import logging
 
@@ -18,9 +18,6 @@ class HealthService:
             
         Returns:
             The current status of the data app
-            
-        Raises:
-            HTTPException: If the data app is not found
         """
         data_app = await self.db_service.get_data_app(code)
         if not data_app:
@@ -41,19 +38,16 @@ class HealthService:
             
         Returns:
             The new status of the data app
-            
-        Raises:
-            HTTPException: If the data app is not found
         """
         data_app = await self.db_service.get_data_app(code)
         if not data_app:
             logger.warning(f"Data app not found for code: {code}")
             raise HTTPException(status_code=404, detail="Data app not found")
 
-        new_status = 'NORMAL'
+        status = 'NORMAL'
         
-        await self.db_service.update_data_app_active(code, new_status)
+        await self.db_service.update_data_app_active(code, status)
         await self.db_service.update_data_app_heartbeat(code)
         
-        logger.debug(f"Updated active status for data app {code} to {new_status}")
-        return new_status
+        logger.debug(f"Updated active status for data app {code} to {status}")
+        return status

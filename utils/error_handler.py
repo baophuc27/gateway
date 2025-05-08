@@ -7,19 +7,9 @@ import uuid
 import inspect
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
-from typing import Dict, Any, Callable, Optional, Type, TypeVar, cast, Union, Awaitable
+from typing import Dict, Any, Callable, Optional, Union, Awaitable
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("application.log")
-    ]
-)
-
-# Create a logger
 logger = logging.getLogger("bas_gateway")
 
 # Create response type variable
@@ -35,36 +25,30 @@ class BaseError(Exception):
         self.details = details or {}
         super().__init__(self.message)
 
-
 class ConfigurationError(BaseError):
     """Error related to configuration handling"""
     status_code = 400
     error_code = "CONFIGURATION_ERROR"
-
 
 class DatabaseError(BaseError):
     """Error related to database operations"""
     status_code = 500
     error_code = "DATABASE_ERROR"
 
-
 class KafkaError(BaseError):
     """Error related to Kafka operations"""
     status_code = 503
     error_code = "KAFKA_ERROR"
-
 
 class ValidationError(BaseError):
     """Error related to data validation"""
     status_code = 400
     error_code = "VALIDATION_ERROR"
 
-
 class NotFoundError(BaseError):
     """Error when a resource is not found"""
     status_code = 404
     error_code = "NOT_FOUND"
-
 
 class RequestContext:
     """Context for tracking request information"""
@@ -96,7 +80,6 @@ class RequestContext:
     def clear(cls):
         """Clear the request context"""
         cls._data = {}
-
 
 def handle_exceptions(func: Callable[..., Union[T, Awaitable[T]]]) -> Callable[..., Union[T, Awaitable[T]]]:
     """
@@ -131,35 +114,10 @@ def handle_exceptions(func: Callable[..., Union[T, Awaitable[T]]]) -> Callable[.
             internal_error.details = {"traceback": traceback.format_exc()}
             raise internal_error
     
-    @functools.wraps(func)
-    def sync_wrapper(*args, **kwargs) -> T:
-        try:
-            return func(*args, **kwargs)
-        except BaseError as e:
-            # Log the error with the request ID
-            logger.error(
-                f"Error [{e.error_code}] - Request ID: {RequestContext.get_request_id()}: {e.message}", 
-                extra={"details": e.details}
-            )
-            # Re-raise to be handled by the FastAPI exception handler
-            raise
-        except Exception as e:
-            # Convert to internal error and log
-            logger.error(
-                f"Unexpected error - Request ID: {RequestContext.get_request_id()}: {str(e)}", 
-                exc_info=True
-            )
-            # Re-raise as a BaseError
-            internal_error = BaseError(message=str(e))
-            internal_error.details = {"traceback": traceback.format_exc()}
-            raise internal_error
-    
     # Choose the appropriate wrapper based on whether the function is async or not
     if inspect.iscoroutinefunction(func):
         return async_wrapper
-    else:
-        return sync_wrapper
-
+    return async_wrapper  # For simplicity, we'll use the async wrapper for all functions
 
 async def request_middleware(request: Request, call_next: Callable):
     """Middleware for request handling and logging"""
@@ -167,33 +125,15 @@ async def request_middleware(request: Request, call_next: Callable):
     request_id = request.headers.get("X-Request-ID")
     request_id = RequestContext.init_request(request_id)
     
-    # Add request ID to headers
-    request.state.request_id = request_id
-    
     # Log the request
-    logger.info(
-        f"Request {request.method} {request.url.path} - ID: {request_id}",
-        extra={
-            "method": request.method,
-            "path": request.url.path,
-            "query_params": str(request.query_params),
-            "request_id": request_id,
-        }
-    )
+    logger.info(f"Request {request.method} {request.url.path} - ID: {request_id}")
     
     try:
         # Process the request
         response = await call_next(request)
         
         # Log the response
-        logger.info(
-            f"Response {response.status_code} - Time: {RequestContext.get_elapsed_time():.3f}s - ID: {request_id}",
-            extra={
-                "status_code": response.status_code,
-                "elapsed_time": RequestContext.get_elapsed_time(),
-                "request_id": request_id,
-            }
-        )
+        logger.info(f"Response {response.status_code} - Time: {RequestContext.get_elapsed_time():.3f}s - ID: {request_id}")
         
         # Add request ID to response headers
         response.headers["X-Request-ID"] = request_id
@@ -201,16 +141,11 @@ async def request_middleware(request: Request, call_next: Callable):
         return response
     except Exception as exc:
         # Log the error
-        logger.error(
-            f"Request failed - ID: {request_id}",
-            exc_info=True,
-            extra={"request_id": request_id}
-        )
+        logger.error(f"Request failed - ID: {request_id}", exc_info=True)
         raise exc
     finally:
         # Clear the request context
         RequestContext.clear()
-
 
 async def exception_handler(request: Request, exc: BaseError):
     """Handle application exceptions and convert to JSON response"""
@@ -229,7 +164,6 @@ async def exception_handler(request: Request, exc: BaseError):
         response["details"] = exc.details
     
     return JSONResponse(status_code=status_code, content=response)
-
 
 def register_exception_handlers(app):
     """Register exception handlers with the FastAPI app"""
@@ -257,10 +191,7 @@ def register_exception_handlers(app):
     # Register handler for generic exceptions
     @app.exception_handler(Exception)
     async def generic_exception_handler(request: Request, exc: Exception):
-        logger.error(
-            f"Unhandled exception - ID: {RequestContext.get_request_id()}", 
-            exc_info=True
-        )
+        logger.error(f"Unhandled exception - ID: {RequestContext.get_request_id()}", exc_info=True)
         return JSONResponse(
             status_code=500,
             content={
