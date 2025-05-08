@@ -1,0 +1,25 @@
+# Core dependencies
+fastapi==0.103.1
+uvicorn[standard]==0.23.2
+pydantic==2.3.0
+sqlalchemy==2.0.21
+
+# Database drivers
+psycopg2-binary==2.9.7
+
+# Kafka
+kafka-python==2.0.2
+
+# Utilities
+python-dotenv==1.0.0
+backoff==2.2.1
+APScheduler==3.10.4
+httpx==0.25.0
+
+# Performance
+ujson==5.8.0
+asyncio==3.4.3
+uvloop==0.17.0; sys_platform != "win32" and implementation_name == "cpython"
+
+# Monitoring
+prometheus-client==0.17.1

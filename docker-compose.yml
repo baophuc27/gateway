@@ -1,0 +1,23 @@
+services:
+  gateway:
+    build: .
+    container_name: bas-gateway
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://root:rootReccotech@0.0.0.0:56432/bas_db
+      - KAFKA_BROKERS=0.0.0.0:29092
+      - CONFIG_DIR=/app/data_app_config
+      - LOG_LEVEL=DEBUG
+      - HEARTBEAT_CHECK_INTERVAL=10
+      - CONFIG_SYNC_INTERVAL=5
+      - TZ=Asia/Ho_Chi_Minh
+    volumes:
+      - ./data_app_config:/app/data_app_config
+      - ./logs:/app/logs
+    network_mode: "host"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:22222/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
