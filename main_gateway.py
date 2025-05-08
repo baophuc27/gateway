@@ -162,22 +162,21 @@ async def update_data_app_config(code: str, config: dict):
 
 # Get data app config endpoint
 @app.get("/data-app/config/{code}")
-@handle_exceptions
 async def get_data_app_config(code: str):
     try:
-        # We need to await this since it's an async function
+        # We need to properly await this since it's an async function
         await health_service.update_heartbeat(code)
     except HTTPException:
         # Ignore heartbeat errors when just fetching config
         pass
     
-    # This is synchronous, no need to await
-    config = config_service.get_config(code)
+    # Get the config (this should be synchronous)
+    config = await config_service.get_config(code)
     
     if config is None:
         raise NotFoundError(f"Configuration not found for code: {code}")
-    
-    return config
+
+    return {"config" :config}
 
 if __name__ == "__main__":
     import uvicorn

@@ -81,13 +81,13 @@ class RequestContext:
         """Clear the request context"""
         cls._data = {}
 
-def handle_exceptions(func: Callable[..., Union[T, Awaitable[T]]]) -> Callable[..., Awaitable[T]]:
+def handle_exceptions(func):
     """
     Decorator for handling exceptions in service and endpoint methods.
     Works with both synchronous and asynchronous functions.
     """
     @functools.wraps(func)
-    async def async_wrapper(*args, **kwargs) -> T:
+    async def async_wrapper(*args, **kwargs):
         try:
             result = func(*args, **kwargs)
             # Check if the result is a coroutine (for async functions)
@@ -112,10 +112,10 @@ def handle_exceptions(func: Callable[..., Union[T, Awaitable[T]]]) -> Callable[.
             )
             # Re-raise as a BaseError
             internal_error = BaseError(message=str(e))
-            internal_error.details = {"traceback": traceback.format_exc()}
+            internal_error.__dict__.update({"details": {"traceback": traceback.format_exc()}})
             raise internal_error
     
-    return async_wrapper  # Always return the async wrapper for FastAPI compatibility
+    return async_wrapper
 
 async def request_middleware(request: Request, call_next: Callable):
     """Middleware for request handling and logging"""

@@ -51,8 +51,13 @@ class MonitoringService:
             # Use run_sync to safely run async code from a sync context
             berth_mappings = self.run_sync(self.db_service.get_data_apps_by_berth_mapping())
             
-            # Update config cache with new mappings
-            self.config_service.update_berth_mappings(berth_mappings)
+            # Check if update_berth_mappings is an async function
+            if asyncio.iscoroutinefunction(self.config_service.update_berth_mappings):
+                # If it's async, run it through run_sync
+                self.run_sync(self.config_service.update_berth_mappings(berth_mappings))
+            else:
+                # If it's not async, call it directly
+                self.config_service.update_berth_mappings(berth_mappings)
             
             logger.debug(f"Updated berth-to-code mappings with {len(berth_mappings)} berths")
         except Exception as e:
