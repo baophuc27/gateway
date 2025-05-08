@@ -98,18 +98,32 @@ class ConfigService:
             self.config_cache[code] = update
             
             # Save to disk
-            self._save_config(code)
+            self._save_config_sync(code)
             
             logger.info(f"Updated config for {code} (version {version})")
             
             # Propagate to other data apps at the same berth if applicable
-            self._propagate_config(code, config)
+            self._propagate_config_sync(code, config)
             
             return update
 
-    @handle_exceptions
-    def _propagate_config(self, source_code: str, config: Dict) -> None:
-        """Propagate a configuration to other data apps at the same berth"""
+    def _save_config_sync(self, code: str) -> None:
+        """Save a configuration to disk (synchronous version)"""
+        try:
+            filepath = os.path.join(self.config_dir, f'{code}.json')
+            with open(filepath, 'w') as f:
+                if hasattr(self.config_cache[code], "dict"):
+                    # Pydantic v1
+                    json.dump(self.config_cache[code].dict(), f, indent=2)
+                else:
+                    # Pydantic v2
+                    json.dump(self.config_cache[code].model_dump(), f, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to save config for {code}: {str(e)}", exc_info=True)
+            raise ConfigurationError(f"Failed to save configuration for {code}: {str(e)}")
+
+    def _propagate_config_sync(self, source_code: str, config: Dict) -> None:
+        """Propagate a configuration to other data apps at the same berth (synchronous version)"""
         # Extract berth information
         org_id = config.get('orgId') or config.get('org_id')
         berth_id = config.get('berthId') or config.get('berth_id')
@@ -180,22 +194,6 @@ class ConfigService:
                                 self.add_config(code, latest_config)
 
     @handle_exceptions
-    def _save_config(self, code: str) -> None:
-        """Save a configuration to disk"""
-        try:
-            filepath = os.path.join(self.config_dir, f'{code}.json')
-            with open(filepath, 'w') as f:
-                if hasattr(self.config_cache[code], "dict"):
-                    # Pydantic v1
-                    json.dump(self.config_cache[code].dict(), f, indent=2)
-                else:
-                    # Pydantic v2
-                    json.dump(self.config_cache[code].model_dump(), f, indent=2)
-        except Exception as e:
-            logger.error(f"Failed to save config for {code}: {str(e)}", exc_info=True)
-            raise ConfigurationError(f"Failed to save configuration for {code}: {str(e)}")
-
-    @handle_exceptions
     def get_config_version(self, code: str) -> Optional[int]:
         """Get the current version of a configuration"""
         with self.config_lock:
@@ -206,11 +204,9 @@ class ConfigService:
     @handle_exceptions
     async def add_config_async(self, code: str, config: Dict) -> ConfigUpdate:
         """Async wrapper for add_config that works in any thread context"""
-        # This is a true async function that works with any event loop
-        return self.add_config(code, config)  # Just call the sync version
+        return self.add_config(code, config)
 
     @handle_exceptions
     async def update_berth_mappings_async(self, mappings: Dict[str, List[str]]) -> None:
         """Async wrapper for update_berth_mappings that works in any thread context"""
-        # This is a true async function that works with any event loop
-        self.update_berth_mappings(mappings)  # Just call the sync version
+        self.update_berth_mappings(mappings)

@@ -172,11 +172,10 @@ async def get_data_app_config(code: str):
     
     # Get the config (this should be synchronous)
     config = await config_service.get_config(code)
-    print(config)
     if config is None:
         raise NotFoundError(f"Configuration not found for code: {code}")
 
-    return {"config" : config}
+    return config
 
 if __name__ == "__main__":
     import uvicorn

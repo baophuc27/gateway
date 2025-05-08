@@ -2,9 +2,212 @@
   "config": {
     "org_id": 17,
     "berth_id": 13,
-    "session_id": 1059,
-    "mode": "stop"
+    "session_id": 1068,
+    "mode": "start",
+    "distance_left_sensor_to_fender": 1,
+    "distance_right_sensor_to_fender": 1,
+    "distance_between_sensors": 70,
+    "limit_zone_1": 60,
+    "limit_zone_2": 120,
+    "limit_zone_3": 200,
+    "alarm": {
+      "zone_1": {
+        "distance": {
+          "left_sensor": [
+            {
+              "status_id": 1,
+              "operator": ">=",
+              "value": 10
+            },
+            {
+              "status_id": 2,
+              "operator": ">=",
+              "value": 5
+            },
+            {
+              "status_id": 3,
+              "operator": ">=",
+              "value": -5
+            }
+          ],
+          "right_sensor": [
+            {
+              "status_id": 1,
+              "operator": ">=",
+              "value": 10
+            },
+            {
+              "status_id": 2,
+              "operator": ">=",
+              "value": 5
+            },
+            {
+              "status_id": 3,
+              "operator": ">=",
+              "value": -5
+            }
+          ]
+        },
+        "speed": {
+          "left_sensor": [
+            {
+              "status_id": 1,
+              "operator": "<=",
+              "value": 13
+            },
+            {
+              "status_id": 2,
+              "operator": "<=",
+              "value": 20
+            },
+            {
+              "status_id": 3,
+              "operator": "<"
+            }
+          ],
+          "right_sensor": [
+            {
+              "status_id": 1,
+              "operator": "<=",
+              "value": 13
+            },
+            {
+              "status_id": 2,
+              "operator": "<=",
+              "value": 20
+            },
+            {
+              "status_id": 3,
+              "operator": "<"
+            }
+          ]
+        },
+        "angle": [
+          {
+            "status_id": 1,
+            "operator": "<=",
+            "value": 15
+          },
+          {
+            "status_id": 2,
+            "operator": "<=",
+            "value": 20
+          },
+          {
+            "status_id": 3,
+            "operator": "<=",
+            "value": 90
+          }
+        ]
+      },
+      "zone_2": {
+        "speed": {
+          "left_sensor": [
+            {
+              "status_id": 1,
+              "operator": "<=",
+              "value": 20
+            },
+            {
+              "status_id": 2,
+              "operator": "<=",
+              "value": 30
+            },
+            {
+              "status_id": 3,
+              "operator": "<="
+            }
+          ],
+          "right_sensor": [
+            {
+              "status_id": 1,
+              "operator": "<=",
+              "value": 20
+            },
+            {
+              "status_id": 2,
+              "operator": "<=",
+              "value": 30
+            },
+            {
+              "status_id": 3,
+              "operator": "<"
+            }
+          ]
+        },
+        "angle": [
+          {
+            "status_id": 1,
+            "operator": "<=",
+            "value": 20
+          },
+          {
+            "status_id": 2,
+            "operator": "<=",
+            "value": 30
+          },
+          {
+            "status_id": 3,
+            "operator": "<=",
+            "value": 90
+          }
+        ]
+      },
+      "zone_3": {
+        "speed": {
+          "left_sensor": [
+            {
+              "status_id": 1,
+              "operator": "<=",
+              "value": 20
+            },
+            {
+              "status_id": 2,
+              "operator": "<=",
+              "value": 30
+            },
+            {
+              "status_id": 3,
+              "operator": "<"
+            }
+          ],
+          "right_sensor": [
+            {
+              "status_id": 1,
+              "operator": "<=",
+              "value": 20
+            },
+            {
+              "status_id": 2,
+              "operator": "<=",
+              "value": 30
+            },
+            {
+              "status_id": 3,
+              "operator": "<"
+            }
+          ]
+        },
+        "angle": [
+          {
+            "status_id": 1,
+            "operator": "<=",
+            "value": 20
+          },
+          {
+            "status_id": 2,
+            "operator": "<=",
+            "value": 30
+          },
+          {
+            "status_id": 3,
+            "operator": "<=",
+            "value": 90
+          }
+        ]
+      }
+    }
   },
-  "timestamp": 1746612492.7618814,
-  "version": 402453
+  "timestamp": 1746720754.7151568,
+  "version": 402454
 }
