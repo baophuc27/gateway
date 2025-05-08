@@ -183,6 +183,10 @@ class KafkaConfigConsumer:
 
     def _consume(self):
         """Consume messages from Kafka"""
+        # Create a new event loop for this thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
         while self.running:
             try:
                 for message in self.consumer:
@@ -205,7 +209,14 @@ class KafkaConfigConsumer:
                         data_app = self.db_service.get_data_app_by_berth_sync(org_id, berth_id)
                         
                         if data_app:
-                            self.config_service.add_config(data_app.code, config)
+                            # Check if add_config is a coroutine function and handle accordingly
+                            if asyncio.iscoroutinefunction(self.config_service.add_config):
+                                # Run the coroutine in this thread's event loop
+                                loop.run_until_complete(self.config_service.add_config(data_app.code, config))
+                            else:
+                                # If it's not async, call it directly
+                                self.config_service.add_config(data_app.code, config)
+                                
                             logger.info(f"Updated config for data app {data_app.code} at berth {org_id}_{berth_id}")
                         else:
                             logger.warning(f"No data app found for berth {org_id}_{berth_id}")
@@ -238,3 +249,6 @@ class KafkaConfigConsumer:
                 logger.info("Kafka consumer closed")
             except Exception as e:
                 logger.error(f"Error closing Kafka consumer: {str(e)}")
+        
+        # Close the event loop
+        loop.close()

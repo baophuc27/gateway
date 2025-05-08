@@ -53,8 +53,8 @@ class ConfigService:
             logger.info(f"Loaded {count} configurations from {self.config_dir}")
 
     @handle_exceptions
-    async def _load_configs(self) -> None:
-        """Async version of load_configs - not used in __init__"""
+    async def load_configs(self) -> None:
+        """Async wrapper for _load_configs_sync"""
         self._load_configs_sync()
 
     @handle_exceptions
@@ -68,8 +68,7 @@ class ConfigService:
             return config.config if config.timestamp > last_timestamp else None
 
     @handle_exceptions
-    def get_config(self, code: str) -> Optional[Dict]:
-        """Get the current configuration for a data app"""
+    async def get_config(self, code: str) -> Optional[Dict]:
         with self.config_lock:
             if code not in self.config_cache:
                 return None
@@ -81,7 +80,7 @@ class ConfigService:
 
     @handle_exceptions
     def add_config(self, code: str, config: Dict) -> ConfigUpdate:
-        """Add or update a configuration for a data app"""
+        """Add or update a configuration for a data app (synchronous version)"""
         with self.config_lock:
             # Generate version and timestamp
             version = 1
@@ -203,3 +202,15 @@ class ConfigService:
             if code not in self.config_cache:
                 return None
             return self.config_cache[code].version
+        
+    @handle_exceptions
+    async def add_config_async(self, code: str, config: Dict) -> ConfigUpdate:
+        """Async wrapper for add_config that works in any thread context"""
+        # This is a true async function that works with any event loop
+        return self.add_config(code, config)  # Just call the sync version
+
+    @handle_exceptions
+    async def update_berth_mappings_async(self, mappings: Dict[str, List[str]]) -> None:
+        """Async wrapper for update_berth_mappings that works in any thread context"""
+        # This is a true async function that works with any event loop
+        self.update_berth_mappings(mappings)  # Just call the sync version

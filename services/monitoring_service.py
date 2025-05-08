@@ -4,6 +4,7 @@ from services.db_service import DatabaseService
 from services.config_service import ConfigService
 import logging
 import asyncio
+import concurrent.futures
 
 logger = logging.getLogger("bas_gateway.monitoring")
 
@@ -11,19 +12,15 @@ class MonitoringService:
     def __init__(self, db_service: DatabaseService, config_service: ConfigService):
         self.db_service = db_service
         self.config_service = config_service
-        self._event_loop = None
-
-    @property
-    def event_loop(self):
-        """Get the current event loop or create a new one if needed"""
-        if self._event_loop is None or self._event_loop.is_closed():
-            try:
-                self._event_loop = asyncio.get_event_loop()
-            except RuntimeError:
-                # If we're not in an event loop (e.g., in a thread), create a new one
-                self._event_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(self._event_loop)
-        return self._event_loop
+        # Create a thread pool for running sync tasks
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+        # Store the main event loop during initialization
+        try:
+            self.main_event_loop = asyncio.get_event_loop()
+        except RuntimeError:
+            # Create a new event loop if one doesn't exist
+            self.main_event_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.main_event_loop)
 
     def check_inactive_data_apps(self):
         """
@@ -35,7 +32,7 @@ class MonitoringService:
             five_mins_ago = datetime.now() - timedelta(hours=7) - timedelta(minutes=5)
             logger.debug(f"Checking for inactive data apps (cutoff: {five_mins_ago})")
             
-            # Run the update synchronously since this is called from the scheduler
+            # Use the sync version directly since this is a scheduled task
             updated_codes = self.db_service.update_inactive_data_apps_sync(five_mins_ago)
             
             if updated_codes:
@@ -48,32 +45,30 @@ class MonitoringService:
         Query all data apps and their berth assignments, updating config cache mappings
         """
         try:
-            # Use run_sync to safely run async code from a sync context
-            berth_mappings = self.run_sync(self.db_service.get_data_apps_by_berth_mapping())
+            # Create a new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            # Run the coroutine in this new event loop
+            berth_mappings = loop.run_until_complete(self.db_service.get_data_apps_by_berth_mapping())
             
             # Check if update_berth_mappings is an async function
             if asyncio.iscoroutinefunction(self.config_service.update_berth_mappings):
-                # If it's async, run it through run_sync
-                self.run_sync(self.config_service.update_berth_mappings(berth_mappings))
+                # If it's async, run it in this thread's event loop
+                loop.run_until_complete(self.config_service.update_berth_mappings(berth_mappings))
             else:
                 # If it's not async, call it directly
                 self.config_service.update_berth_mappings(berth_mappings)
             
             logger.debug(f"Updated berth-to-code mappings with {len(berth_mappings)} berths")
+            
+            # Clean up
+            loop.close()
         except Exception as e:
             logger.error(f"Error syncing berth configs: {str(e)}", exc_info=True)
             
-    def run_sync(self, coroutine):
+    def run_in_executor(self, func, *args):
         """
-        Run a coroutine synchronously, handling the event loop appropriately
+        Run a synchronous function in a thread pool
         """
-        loop = self.event_loop
-        
-        if loop.is_running():
-            # If the loop is already running (e.g., inside the application),
-            # use run_coroutine_threadsafe
-            future = asyncio.run_coroutine_threadsafe(coroutine, loop)
-            return future.result()
-        else:
-            # Otherwise, run the coroutine directly
-            return loop.run_until_complete(coroutine)
+        return self.executor.submit(func, *args).result()
