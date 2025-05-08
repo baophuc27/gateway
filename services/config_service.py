@@ -20,13 +20,12 @@ class ConfigService:
         # Create config directory if it doesn't exist
         os.makedirs(config_dir, exist_ok=True)
         
-        # Load existing configurations
-        self._load_configs()
+        # Load existing configurations - use synchronous version instead
+        self._load_configs_sync()
         logger.info(f"Initialized ConfigService with {len(self.config_cache)} configurations")
     
-    @handle_exceptions
-    def _load_configs(self) -> None:
-        """Load all configuration files from the config directory"""
+    def _load_configs_sync(self) -> None:
+        """Load all configuration files from the config directory (synchronous version)"""
         with self.config_lock:
             count = 0
             for filename in os.listdir(self.config_dir):
@@ -52,6 +51,11 @@ class ConfigService:
                         logger.error(f"Error loading config for {filename}: {str(e)}", exc_info=True)
             
             logger.info(f"Loaded {count} configurations from {self.config_dir}")
+
+    @handle_exceptions
+    async def _load_configs(self) -> None:
+        """Async version of load_configs - not used in __init__"""
+        self._load_configs_sync()
 
     @handle_exceptions
     def get_pending_configs(self, code: str, last_timestamp: float) -> Optional[Dict]:

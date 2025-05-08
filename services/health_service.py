@@ -24,6 +24,7 @@ class HealthService:
             logger.warning(f"Data app not found for code: {code}")
             raise HTTPException(status_code=404, detail="Data app not found")
         
+        # Make sure we properly await this
         await self.db_service.update_data_app_heartbeat(code)
         logger.debug(f"Updated heartbeat for data app {code}")
         
@@ -46,6 +47,7 @@ class HealthService:
 
         status = 'NORMAL'
         
+        # Make sure we properly await these
         await self.db_service.update_data_app_active(code, status)
         await self.db_service.update_data_app_heartbeat(code)
         

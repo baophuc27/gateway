@@ -165,11 +165,13 @@ async def update_data_app_config(code: str, config: dict):
 @handle_exceptions
 async def get_data_app_config(code: str):
     try:
+        # We need to await this since it's an async function
         await health_service.update_heartbeat(code)
     except HTTPException:
         # Ignore heartbeat errors when just fetching config
         pass
     
+    # This is synchronous, no need to await
     config = config_service.get_config(code)
     
     if config is None:

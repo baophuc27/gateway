@@ -11,6 +11,19 @@ class MonitoringService:
     def __init__(self, db_service: DatabaseService, config_service: ConfigService):
         self.db_service = db_service
         self.config_service = config_service
+        self._event_loop = None
+
+    @property
+    def event_loop(self):
+        """Get the current event loop or create a new one if needed"""
+        if self._event_loop is None or self._event_loop.is_closed():
+            try:
+                self._event_loop = asyncio.get_event_loop()
+            except RuntimeError:
+                # If we're not in an event loop (e.g., in a thread), create a new one
+                self._event_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self._event_loop)
+        return self._event_loop
 
     def check_inactive_data_apps(self):
         """
@@ -35,12 +48,8 @@ class MonitoringService:
         Query all data apps and their berth assignments, updating config cache mappings
         """
         try:
-            # Get mapping of berth keys to data app codes - must run in event loop
-            berth_mappings_future = asyncio.run_coroutine_threadsafe(
-                self.db_service.get_data_apps_by_berth_mapping(),
-                asyncio.get_event_loop()
-            )
-            berth_mappings = berth_mappings_future.result()
+            # Use run_sync to safely run async code from a sync context
+            berth_mappings = self.run_sync(self.db_service.get_data_apps_by_berth_mapping())
             
             # Update config cache with new mappings
             self.config_service.update_berth_mappings(berth_mappings)
@@ -48,3 +57,18 @@ class MonitoringService:
             logger.debug(f"Updated berth-to-code mappings with {len(berth_mappings)} berths")
         except Exception as e:
             logger.error(f"Error syncing berth configs: {str(e)}", exc_info=True)
+            
+    def run_sync(self, coroutine):
+        """
+        Run a coroutine synchronously, handling the event loop appropriately
+        """
+        loop = self.event_loop
+        
+        if loop.is_running():
+            # If the loop is already running (e.g., inside the application),
+            # use run_coroutine_threadsafe
+            future = asyncio.run_coroutine_threadsafe(coroutine, loop)
+            return future.result()
+        else:
+            # Otherwise, run the coroutine directly
+            return loop.run_until_complete(coroutine)

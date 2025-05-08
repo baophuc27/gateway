@@ -7,7 +7,7 @@ import uuid
 import inspect
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
-from typing import Dict, Any, Callable, Optional, Union, Awaitable
+from typing import Dict, Any, Callable, Optional, TypeVar, Union, Awaitable
 
 # Configure logging
 logger = logging.getLogger("bas_gateway")
@@ -81,7 +81,7 @@ class RequestContext:
         """Clear the request context"""
         cls._data = {}
 
-def handle_exceptions(func: Callable[..., Union[T, Awaitable[T]]]) -> Callable[..., Union[T, Awaitable[T]]]:
+def handle_exceptions(func: Callable[..., Union[T, Awaitable[T]]]) -> Callable[..., Awaitable[T]]:
     """
     Decorator for handling exceptions in service and endpoint methods.
     Works with both synchronous and asynchronous functions.
@@ -94,6 +94,7 @@ def handle_exceptions(func: Callable[..., Union[T, Awaitable[T]]]) -> Callable[.
             if inspect.iscoroutine(result):
                 # Await the coroutine
                 return await result
+            # If it's a regular result, return it directly
             return result
         except BaseError as e:
             # Log the error with the request ID
@@ -114,10 +115,7 @@ def handle_exceptions(func: Callable[..., Union[T, Awaitable[T]]]) -> Callable[.
             internal_error.details = {"traceback": traceback.format_exc()}
             raise internal_error
     
-    # Choose the appropriate wrapper based on whether the function is async or not
-    if inspect.iscoroutinefunction(func):
-        return async_wrapper
-    return async_wrapper  # For simplicity, we'll use the async wrapper for all functions
+    return async_wrapper  # Always return the async wrapper for FastAPI compatibility
 
 async def request_middleware(request: Request, call_next: Callable):
     """Middleware for request handling and logging"""
